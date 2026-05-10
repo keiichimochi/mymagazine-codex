@@ -129,6 +129,8 @@ const issueDateInput = document.querySelector("#issue-date");
 const generateMagazineButton = document.querySelector("#generate-magazine-button");
 const loadMagazineButton = document.querySelector("#load-magazine-button");
 const saveMagazineButton = document.querySelector("#save-magazine-button");
+const imageGenerateLimitInput = document.querySelector("#image-generate-limit");
+const generateMagazineImagesButton = document.querySelector("#generate-magazine-images-button");
 
 document.querySelector("#sample-button").addEventListener("click", () => {
   Object.entries(sampleAnswers).forEach(([name, value]) => {
@@ -286,6 +288,44 @@ saveMagazineButton.addEventListener("click", async () => {
   }
 });
 
+generateMagazineImagesButton.addEventListener("click", async () => {
+  if (!currentMagazine) {
+    magazinePanel.innerHTML = '<div class="warning">先に雑誌を生成または読み込んでください。</div>';
+    activateTab("magazine");
+    return;
+  }
+  if (location.protocol === "file:") {
+    magazinePanel.innerHTML = '<div class="warning">実画像生成はローカル App Server 起動時のみ利用できます。npm run restart:codex か npm start で http://localhost:4173 を開いてください。</div>';
+    activateTab("magazine");
+    return;
+  }
+  const assets = collectMagazineAssets(currentMagazine);
+  const limit = Math.min(Math.max(Number(imageGenerateLimitInput.value) || 1, 1), assets.length);
+  setBusy(true, "雑誌画像を生成中...");
+  activateTab("magazine");
+  try {
+    for (let index = 0; index < limit; index += 1) {
+      const item = assets[index];
+      const percent = Math.max(1, Math.round((index / limit) * 100));
+      updateMagazineProgress(item.page.number, percent, `画像 ${index + 1}/${limit}: ${item.asset.title} を Gemini Nano Banana Pro で生成中...`);
+      const result = await generateMagazineAssetFromProvider(currentMagazine, item.page, item.asset, item.assetIndex);
+      item.asset.imageUrl = result.imageUrl;
+      item.asset.generatedPrompt = result.prompt;
+      item.asset.generatedModel = result.model;
+      item.asset.generatedAt = new Date().toISOString();
+      currentMagazine = await saveCurrentMagazine(currentMagazine);
+    }
+    updateMagazineProgress(16, 100, `画像生成を完了しました。${limit}点の素材を誌面へ反映済みです。`);
+    renderMagazine(currentMagazine);
+    jsonOutput.textContent = JSON.stringify({ worldline: currentWorldline, magazine: currentMagazine }, null, 2);
+  } catch (error) {
+    renderMagazine(currentMagazine);
+    magazinePanel.insertAdjacentHTML("afterbegin", `<div class="warning">画像生成に失敗しました: ${escapeHtml(error.message)}</div>`);
+  } finally {
+    setBusy(false);
+  }
+});
+
 document.querySelector("#copy-json").addEventListener("click", async () => {
   if (!currentWorldline) return;
   await navigator.clipboard.writeText(JSON.stringify(currentWorldline, null, 2));
@@ -329,6 +369,32 @@ async function generateMagazineFromProvider(worldline, issueDate) {
   }, 300000);
   if (!payload.ok) throw new Error(payload.error || "雑誌生成に失敗しました");
   return payload.magazine;
+}
+
+async function generateMagazineAssetFromProvider(magazine, page, asset, assetIndex) {
+  const payload = await fetchJson("/api/magazine/asset-image", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      issueDate: magazine.issueDate,
+      pageNumber: page.number,
+      assetIndex,
+      page,
+      asset
+    })
+  }, 180000);
+  if (!payload.ok) throw new Error(payload.error || "画像生成に失敗しました");
+  return payload;
+}
+
+function collectMagazineAssets(magazine) {
+  return (magazine.pages || []).flatMap((page) => (
+    (page.assets || []).map((asset, assetIndex) => ({
+      page,
+      asset,
+      assetIndex
+    }))
+  ));
 }
 
 async function loadCurrentMagazine(issueDate) {
@@ -623,28 +689,28 @@ function createImagePrompts(worldline = {}) {
       title: `${title} 表紙`,
       kind: "cover",
       page: 1,
-      prompt: `架空の1998年ゲーム雑誌表紙。特集は${hardware.name}。厚い見出し、赤と黄色の誌面、開発中スクリーンショット枠、実在ロゴなし、90年代日本ゲーム雑誌の印刷質感。`,
+      prompt: `架空の1998年ゲーム雑誌表紙。特集は${hardware.name}。Beepメガドライブ時代の濃い広告色、巨大な特集数字、赤い斜め見出し、開発中スクリーンショット枠、誌面スキャン風の紙質。実在ロゴなし。`,
       negativePrompt: "実在企業ロゴ、実在ゲーム画面、読めない小文字の大量生成、現代スマホUI"
     },
     {
       title: `${hardware.name} 架空スクリーンショット`,
       kind: "screenshot",
       page: 4,
-      prompt: `${hardware.name}向けの存在しない2DアクションRPGのスクリーンショット。16-bitと32-bitの中間、鮮やかなドット絵、FM音源時代の未来感、ブラウン管キャプチャ風。`,
+      prompt: `${hardware.name}向けの存在しない2DアクションRPGのスクリーンショット。攻略記事に貼られた小さな画面写真、赤ペン注釈、16-bitと32-bitの中間、鮮やかなドット絵、FM音源時代の未来感、ブラウン管キャプチャ風。`,
       negativePrompt: "既存ゲームのキャラクター、写真風、3D AAA風、実在UI"
     },
     {
       title: "音源比較 特集カット",
       kind: "feature-art",
       page: 6,
-      prompt: "YM2612X、PCM 8ch、CDDAを比較する雑誌記事用イラスト。波形、チップ、カートリッジ、CD、編集部の手書き注釈風。",
+      prompt: "YM2612X、PCM 8ch、CDDAを比較する雑誌記事用イラスト。波形、チップ、カートリッジ、CD、編集部の手書き注釈、緑と水色の囲み記事、90年代ゲーム雑誌の高密度紙面。",
       negativePrompt: "実在メーカー商標、現代的なフラットUI、過度なSF背景"
     },
     {
       title: "架空周辺機器広告",
       kind: "advertisement",
       page: 12,
-      prompt: `${hardware.name}用の未発売周辺機器広告。音源デモCD応募券、発売日未定、開発率35%、90年代雑誌広告、実在ブランドなし。`,
+      prompt: `${hardware.name}用の未発売周辺機器広告。黄色い爆発マーク、赤い価格帯、音源デモCD応募券、発売日未定、開発率35%、Beepメガドライブ風の勢いある雑誌広告、実在ブランドなし。`,
       negativePrompt: "本物の商標、QRコード、現代ECサイト風"
     }
   ];
@@ -681,7 +747,7 @@ function generateMagazine(worldline = {}, issueDate) {
         body: `${persona.name}は${persona.role}の視点から、${hardware.name}の現在地を検証する。\n\n${eventText}が市場に残した影響は大きく、${item.description}\n\n本誌は設定DBと年表を参照し、毎号の出来事が次号以降にも残るように記録する。`,
         writer: persona.name,
         timelineRefs: event ? [String(event.year)] : [],
-        imagePrompt: `1990年代日本ゲーム雑誌の${item.title}ページ。${hardware.name}、${theme}、${item.description}。実在ロゴなし、紙面スキャン風。`,
+        imagePrompt: `Beepメガドライブ時代を参考にした架空1990年代日本ゲーム雑誌の${item.title}ページ。${hardware.name}、${theme}、${item.description}。色帯、攻略スクショ、赤字注釈、読者欄、広告枠を高密度に配置。実在ロゴなし、紙面スキャン風。`,
         assets: createPageAssets(item, hardware, theme, index),
         callouts: createPageCallouts(item, hardware, eventText, index),
         scoreBox: {
@@ -697,24 +763,25 @@ function generateMagazine(worldline = {}, issueDate) {
 }
 
 function createPageAssets(item, hardware, theme, index) {
+  const base = "Beepメガドライブ時代を参考にした架空ゲーム雑誌素材。高密度な誌面、緑/黄/赤/シアンの色帯、印刷網点、紙面スキャン、実在ロゴなし。";
   return [
     {
       kind: index === 0 ? "cover-art" : "screenshot",
       title: `${item.title} メインビジュアル`,
       caption: `${hardware.name}で動作する架空ソフトの誌面用メイン画像。`,
-      prompt: `90年代日本ゲーム雑誌掲載用。${hardware.name}、${item.title}、${theme}。架空ゲームのスクリーンショット、大きなキャプション欄、印刷網点、実在ロゴなし。`
+      prompt: `${base} ${hardware.name}、${item.title}、${theme}。架空ゲームのスクリーンショットを複数並べ、攻略矢印、小さな日本語キャプション、開発率表示、赤いBOSS見出しを入れる。`
     },
     {
       kind: index % 2 === 0 ? "hardware-photo" : "box-art",
       title: `${hardware.name} 資料写真`,
       caption: `編集部が入手したとされる${hardware.media || "試作メディア"}と周辺機器の写真風カット。`,
-      prompt: `架空ハード${hardware.name}の製品写真風。カートリッジ、基板、コントローラ、雑誌撮影ブース、90年代広告写真、実在ロゴなし。`
+      prompt: `${base} 架空ハード${hardware.name}の製品写真風。カートリッジ、基板、コントローラ、箱、価格札、スペック表、90年代広告写真。`
     },
     {
       kind: index % 4 === 0 ? "advertisement" : "diagram",
       title: `${item.title} 欄外カット`,
       caption: "読者の目を止める小さな広告・図解枠。",
-      prompt: `${item.title}の欄外用。小型の架空広告、スペック図、手書き矢印、黄色い速報帯、ファミ通風の紙面密度、実在ロゴなし。`
+      prompt: `${base} ${item.title}の欄外用。小型の架空広告、スペック図、手書き矢印、黄色い速報帯、読者投稿風の顔アイコン、点線囲み、レビュー点数丸。`
     }
   ];
 }
@@ -904,7 +971,7 @@ function renderMagazine(magazine) {
     <ul class="pill-list">${(magazine.timelineDigest || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
     <div class="magazine-pages">
       ${(magazine.pages || []).map((page) => `
-        <article class="magazine-page">
+        <article class="magazine-page magazine-page-${escapeHtml(page.number)}">
           <header class="magazine-page-head">
             <span class="page-no">P.${escapeHtml(page.number)}</span>
             <p class="kicker">${escapeHtml(page.section)} / ${escapeHtml(page.writer)}</p>
@@ -987,12 +1054,15 @@ function renderPageAssets(page) {
   }];
   return assets.map((asset, index) => `
     <figure class="asset-box asset-${escapeHtml(asset.kind)}">
-      <div class="asset-art">
-        <span>${escapeHtml(asset.kind)}</span>
-        <strong>${escapeHtml(asset.title)}</strong>
-      </div>
+      ${asset.imageUrl
+        ? `<img class="asset-image" src="${escapeHtml(asset.imageUrl)}" alt="${escapeHtml(asset.title)}">`
+        : `<div class="asset-art">
+            <span>${escapeHtml(asset.kind)}</span>
+            <strong>${escapeHtml(asset.title)}</strong>
+          </div>`}
       <figcaption>${escapeHtml(asset.caption)}</figcaption>
       <p class="asset-prompt">${escapeHtml(asset.prompt)}</p>
+      ${asset.generatedModel ? `<p class="asset-model">${escapeHtml(asset.generatedModel)}</p>` : ""}
     </figure>
   `).join("");
 }

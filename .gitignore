@@ -1,6 +1,10 @@
 .DS_Store
 node_modules/
 .server.log
+.env
+.env.local
+.env*.local
+generated-images/
 
 # Local/generated state. Keep source code and seed data in git, but do not
 # publish the user's generated magazines or current worldline by default.

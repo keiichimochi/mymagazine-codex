@@ -18,6 +18,9 @@ flowchart LR
   J --> K["Magazine Issue"]
   I --> L["Timeline Editor"]
   L --> K
+  K --> M["Gemini Image API"]
+  M --> N["generated-images"]
+  N --> K
 ```
 
 ## レイヤー
@@ -47,9 +50,14 @@ flowchart LR
 - `item/completed`
 - `turn/completed`
 
+画像生成は Codex App Server ではなく Google Gemini API を直接呼び出す。`.env.local` または環境変数の `GEMINI_API_KEY` をサーバー起動時に読み込み、`gemini-3-pro-image-preview` を既定モデルとして画像を生成する。
+
 ### 3. データレイヤー
 
 - `data/seed-worldline.json`
+- `data/current-worldline.json`
+- `data/magazines/YYYY-MM.json`
+- `generated-images/YYYY-MM/*.png`
 
 初期の架空ハード、メーカー、ライター、記事タイプ、広告文化を定義する。
 
@@ -59,7 +67,7 @@ flowchart LR
 - `seed-worldline.json` を号数ごとの状態保存DBへ拡張する。
 - LLM 連携時は「世界線DB + 号数状態 + 記事タイプ + ライター人格」をプロンプトに渡す。
 - 画像生成時はページ種別ごとにスタイルプロンプトを固定する。
-- 実画像生成は次段階で追加し、現段階では画像生成プロンプトまでを App Server で作る。
+- 実画像生成は雑誌の `assets` 単位で実行し、生成画像URLを雑誌JSONへ追記して保存する。
 
 ## 状態管理
 

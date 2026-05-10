@@ -5,11 +5,15 @@ const { execFile } = require("node:child_process");
 const { CodexAppServerClient } = require("./codex-app-server-client");
 
 const root = __dirname;
+loadLocalEnv(path.join(root, ".env.local"));
+
 const port = Number(process.env.PORT || 4173);
 const aiProvider = process.env.MAGAZINE_AI_PROVIDER || "local";
 const codexModel = process.env.CODEX_MODEL || "gpt-5.4";
+const geminiImageModel = process.env.GEMINI_IMAGE_MODEL || "gemini-3-pro-image-preview";
 const currentWorldlinePath = path.join(root, "data/current-worldline.json");
 const magazinesDir = path.join(root, "data/magazines");
+const generatedImagesDir = path.join(root, "generated-images");
 const seed = JSON.parse(fs.readFileSync(path.join(root, "data/seed-worldline.json"), "utf8"));
 
 const server = http.createServer(async (req, res) => {
@@ -20,6 +24,8 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         ok: true,
         provider: aiProvider,
+        imageModel: geminiImageModel,
+        imageApiConfigured: Boolean(getGeminiApiKey()),
         codexAvailable: await commandExists("codex"),
         note: aiProvider === "codex-app-server"
           ? "codex app-server を子プロセスとして起動し、JSONL over stdio で生成します。"
@@ -83,6 +89,12 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, magazine: body.magazine });
     }
 
+    if (req.method === "POST" && url.pathname === "/api/magazine/asset-image") {
+      const body = await readJson(req);
+      const result = await generateMagazineAssetImage(body);
+      return sendJson(res, 200, { ok: true, ...result });
+    }
+
     if (req.method === "GET" && url.pathname === "/api/magazines") {
       return sendJson(res, 200, { ok: true, magazines: listMagazines() });
     }
@@ -100,7 +112,26 @@ const server = http.createServer(async (req, res) => {
 server.listen(port, () => {
   console.log(`MyMagazine App Server: http://localhost:${port}`);
   console.log(`AI provider: ${aiProvider}`);
+  console.log(`Image model: ${geminiImageModel}`);
 });
+
+function loadLocalEnv(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const raw = fs.readFileSync(filePath, "utf8");
+  raw.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return;
+    const index = trimmed.indexOf("=");
+    if (index === -1) return;
+    const key = trimmed.slice(0, index).trim();
+    let value = trimmed.slice(index + 1).trim();
+    if (!key || process.env[key] !== undefined) return;
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  });
+}
 
 function serveStatic(req, res, pathname) {
   const requested = pathname === "/" ? "/index.html" : pathname;
@@ -122,7 +153,11 @@ function serveStatic(req, res, pathname) {
     ".css": "text/css; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
     ".json": "application/json; charset=utf-8",
-    ".svg": "image/svg+xml"
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp"
   };
   res.writeHead(200, { "content-type": types[ext] || "application/octet-stream" });
   fs.createReadStream(filePath).pipe(res);
@@ -270,6 +305,113 @@ async function generateWithProvider(kind, input, fallback) {
   return fallback;
 }
 
+async function generateMagazineAssetImage(input) {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not configured. .env.local または Vercel 環境変数に設定してください。");
+  }
+
+  const issueDate = normalizeIssueDate(input.issueDate);
+  const pageNumber = Number(input.pageNumber || 1);
+  const assetIndex = Number(input.assetIndex || 0);
+  const asset = input.asset || {};
+  const page = input.page || {};
+  const aspectRatio = chooseAspectRatio(asset.kind, pageNumber);
+  const finalPrompt = buildGeminiImagePrompt({ issueDate, page, asset, aspectRatio });
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${geminiImageModel}:generateContent`;
+  const body = {
+    contents: [
+      {
+        parts: [
+          {
+            text: finalPrompt
+          }
+        ]
+      }
+    ]
+  };
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-goog-api-key": apiKey
+    },
+    body: JSON.stringify(body)
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.error) {
+    const message = payload.error?.message || `Gemini image API failed with HTTP ${response.status}`;
+    throw new Error(message);
+  }
+
+  const inline = extractInlineImage(payload);
+  if (!inline?.data) {
+    throw new Error("Gemini image API did not return inline image data");
+  }
+
+  const mimeType = inline.mimeType || inline.mime_type || "image/png";
+  const ext = mimeToExt(mimeType);
+  const safeIssue = issueDate.replace(/[^0-9-]/g, "");
+  const dir = path.join(generatedImagesDir, safeIssue);
+  fs.mkdirSync(dir, { recursive: true });
+  const fileName = [
+    `p${String(pageNumber).padStart(2, "0")}`,
+    `a${String(assetIndex + 1).padStart(2, "0")}`,
+    slugify(asset.kind || "asset"),
+    `${Date.now()}.${ext}`
+  ].join("-");
+  const filePath = path.join(dir, fileName);
+  fs.writeFileSync(filePath, Buffer.from(inline.data, "base64"));
+
+  return {
+    model: geminiImageModel,
+    issueDate,
+    pageNumber,
+    assetIndex,
+    imageUrl: `/generated-images/${safeIssue}/${fileName}`,
+    mimeType,
+    prompt: finalPrompt
+  };
+}
+
+function getGeminiApiKey() {
+  return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
+}
+
+function buildGeminiImagePrompt({ issueDate, page, asset, aspectRatio }) {
+  return [
+    "Create a fictional Japanese 1990s retro game magazine visual asset.",
+    "Reference the density, colored bars, screenshot-heavy strategy pages, ad energy, and print texture of Beep Mega Drive era magazines, without copying any real page, logo, character, screenshot, or trademark.",
+    "Use fictional game titles, fictional hardware, fictional UI, fictional characters, and invented Japanese magazine text blocks. Text may be stylized but should not imitate real brand marks.",
+    "Aesthetic: offset print, CMYK ink, halftone dots, slightly aged paper, bold red/yellow/green/cyan section labels, dense captions, hand-drawn arrows, 16-bit/32-bit game culture.",
+    `Issue: ${issueDate}. Page: P.${page.number || "?"} ${page.section || ""}. Headline context: ${page.headline || ""}.`,
+    `Asset type: ${asset.kind || "screenshot"}. Asset title: ${asset.title || ""}. Caption: ${asset.caption || ""}.`,
+    `Original prompt: ${asset.prompt || page.imagePrompt || ""}.`,
+    `Aspect ratio: ${aspectRatio}.`,
+    "Avoid modern smartphone UI, QR codes, real company logos, real game characters, exact magazine mastheads, photorealistic celebrities, and clean modern web design."
+  ].join("\n");
+}
+
+function extractInlineImage(payload) {
+  const parts = payload.candidates?.flatMap((candidate) => candidate.content?.parts || []) || [];
+  const imagePart = parts.find((part) => part.inlineData?.data || part.inline_data?.data);
+  return imagePart?.inlineData || imagePart?.inline_data || null;
+}
+
+function chooseAspectRatio(kind = "", pageNumber = 1) {
+  if (pageNumber === 1 || kind.includes("cover")) return "3:4";
+  if (kind.includes("advertisement")) return "4:3";
+  if (kind.includes("diagram") || kind.includes("hardware")) return "1:1";
+  return "4:3";
+}
+
+function mimeToExt(mimeType) {
+  if (mimeType.includes("jpeg") || mimeType.includes("jpg")) return "jpg";
+  if (mimeType.includes("webp")) return "webp";
+  return "png";
+}
+
 async function generateWorldlineWithAppServer(input, fallback) {
   const prompt = [
     "あなたは架空ゲーム雑誌の編集長です。",
@@ -360,7 +502,8 @@ async function generateMagazineWithAppServer(input, fallback) {
     "あなたは架空ゲーム雑誌の編集長です。",
     "世界線JSON、編集済み年表、対象年月をもとに、16ページの雑誌1号分を生成してください。",
     "年表にある出来事を必ず誌面内容に反映してください。",
-    "ファミ通、Beep、ゲーメスト、サターンファンのような90年代日本ゲーム雑誌の紙面を意識し、各ページに複数の画像枠、スクリーンショット枠、ハード写真枠、広告風カット、図解カット、キャプション、欄外メモを入れてください。",
+    "Beepメガドライブ期の紙面密度を主参考にし、攻略スクショの多段配置、緑/黄/赤/シアンの色帯、赤字注釈、広告欄、読者企画欄、レビュー点数欄が混在する誌面にしてください。",
+    "各ページに複数の画像枠、スクリーンショット枠、ハード写真枠、広告風カット、図解カット、キャプション、欄外メモを入れてください。",
     "実在ロゴや実在ゲーム画面の複製は禁止です。架空ソフト、架空ハード、架空広告として作ってください。",
     "最終回答はJSONオブジェクトのみ。Markdown、説明文、コードフェンスは禁止です。",
     "",
@@ -686,28 +829,28 @@ function createImagePrompts(worldline = {}) {
       title: `${title} 表紙`,
       kind: "cover",
       page: 1,
-      prompt: `架空の1998年ゲーム雑誌表紙。特集は${hardware.name}。厚い見出し、赤と黄色の誌面、開発中スクリーンショット枠、実在ロゴなし、90年代日本ゲーム雑誌の印刷質感。`,
+      prompt: `架空の1998年ゲーム雑誌表紙。特集は${hardware.name}。Beepメガドライブ時代の濃い広告色、巨大な特集数字、赤い斜め見出し、開発中スクリーンショット枠、誌面スキャン風の紙質。実在ロゴなし。`,
       negativePrompt: "実在企業ロゴ、実在ゲーム画面、読めない小文字の大量生成、現代スマホUI"
     },
     {
       title: `${hardware.name} 架空スクリーンショット`,
       kind: "screenshot",
       page: 4,
-      prompt: `${hardware.name}向けの存在しない2DアクションRPGのスクリーンショット。16-bitと32-bitの中間、鮮やかなドット絵、FM音源時代の未来感、ブラウン管キャプチャ風。`,
+      prompt: `${hardware.name}向けの存在しない2DアクションRPGのスクリーンショット。攻略記事に貼られた小さな画面写真、赤ペン注釈、16-bitと32-bitの中間、鮮やかなドット絵、FM音源時代の未来感、ブラウン管キャプチャ風。`,
       negativePrompt: "既存ゲームのキャラクター、写真風、3D AAA風、実在UI"
     },
     {
       title: "音源比較 特集カット",
       kind: "feature-art",
       page: 6,
-      prompt: `YM2612X、PCM 8ch、CDDAを比較する雑誌記事用イラスト。波形、チップ、カートリッジ、CD、編集部の手書き注釈風。`,
+      prompt: `YM2612X、PCM 8ch、CDDAを比較する雑誌記事用イラスト。波形、チップ、カートリッジ、CD、編集部の手書き注釈、緑と水色の囲み記事、90年代ゲーム雑誌の高密度紙面。`,
       negativePrompt: "実在メーカー商標、現代的なフラットUI、過度なSF背景"
     },
     {
       title: "架空周辺機器広告",
       kind: "advertisement",
       page: 12,
-      prompt: `${hardware.name}用の未発売周辺機器広告。音源デモCD応募券、発売日未定、開発率35%、90年代雑誌広告、実在ブランドなし。`,
+      prompt: `${hardware.name}用の未発売周辺機器広告。黄色い爆発マーク、赤い価格帯、音源デモCD応募券、発売日未定、開発率35%、Beepメガドライブ風の勢いある雑誌広告、実在ブランドなし。`,
       negativePrompt: "本物の商標、QRコード、現代ECサイト風"
     }
   ];
@@ -745,7 +888,7 @@ function generateMagazine(worldline = {}, issueDate) {
         body: createMagazineBody(item, hardware, persona, eventText, worldline),
         writer: persona.name,
         timelineRefs: event ? [String(event.year)] : [],
-        imagePrompt: `1990年代日本ゲーム雑誌の${item.title}ページ。${hardware.name}、${monthTheme}、${item.description}。実在ロゴなし、紙面スキャン風。`,
+        imagePrompt: `Beepメガドライブ時代を参考にした架空1990年代日本ゲーム雑誌の${item.title}ページ。${hardware.name}、${monthTheme}、${item.description}。色帯、攻略スクショ、赤字注釈、読者欄、広告枠を高密度に配置。実在ロゴなし、紙面スキャン風。`,
         assets: createPageAssets(item, hardware, monthTheme, index),
         callouts: createPageCallouts(item, hardware, eventText, index),
         scoreBox: {
@@ -803,24 +946,25 @@ function createMagazineBody(item, hardware, persona, eventText, worldline) {
 
 function createPageAssets(item, hardware, theme, index) {
   const section = item.title;
+  const base = `Beepメガドライブ時代を参考にした架空ゲーム雑誌素材。高密度な誌面、緑/黄/赤/シアンの色帯、印刷網点、紙面スキャン、実在ロゴなし。`;
   return [
     {
       kind: index === 0 ? "cover-art" : "screenshot",
       title: `${section} メインビジュアル`,
       caption: `${hardware.name}で動作する架空ソフトの誌面用メイン画像。`,
-      prompt: `90年代日本ゲーム雑誌掲載用。${hardware.name}、${section}、${theme}。架空ゲームのスクリーンショット、大きなキャプション欄、印刷網点、実在ロゴなし。`
+      prompt: `${base} ${hardware.name}、${section}、${theme}。架空ゲームのスクリーンショットを複数並べ、攻略矢印、小さな日本語キャプション、開発率表示、赤いBOSS見出しを入れる。`
     },
     {
       kind: index % 2 === 0 ? "hardware-photo" : "box-art",
       title: `${hardware.name} 資料写真`,
       caption: `編集部が入手したとされる${hardware.media || "試作メディア"}と周辺機器の写真風カット。`,
-      prompt: `架空ハード${hardware.name}の製品写真風。カートリッジ、基板、コントローラ、雑誌撮影ブース、90年代広告写真、実在ロゴなし。`
+      prompt: `${base} 架空ハード${hardware.name}の製品写真風。カートリッジ、基板、コントローラ、箱、価格札、スペック表、90年代広告写真。`
     },
     {
       kind: index % 4 === 0 ? "advertisement" : "diagram",
       title: `${section} 欄外カット`,
       caption: `読者の目を止める小さな広告・図解枠。`,
-      prompt: `${section}の欄外用。小型の架空広告、スペック図、手書き矢印、黄色い速報帯、ファミ通風の紙面密度、実在ロゴなし。`
+      prompt: `${base} ${section}の欄外用。小型の架空広告、スペック図、手書き矢印、黄色い速報帯、読者投稿風の顔アイコン、点線囲み、レビュー点数丸。`
     }
   ];
 }

@@ -16,6 +16,8 @@
 - 雑誌の保存・読み込み
 - 保存済み雑誌一覧からの1クリック読み込み
 - 世界線の年表表示・編集
+- Beep メガドライブ期の紙面を参考にした高密度な誌面レイアウト
+- Gemini Nano Banana Pro による雑誌用画像生成
 
 ## 使い方
 
@@ -49,6 +51,17 @@ http://localhost:4173
 - `npm run start:codex`: `codex app-server` を子プロセス起動し、JSONL over stdio で生成
 - `npm run start:codex-exec`: `codex exec` による単発生成
 
+## 画像生成
+
+`.env.local` または Vercel の環境変数に `GEMINI_API_KEY` を設定すると、「雑誌画像生成」ボタンから誌面内の画像素材を生成できます。
+
+```bash
+GEMINI_API_KEY=...
+GEMINI_IMAGE_MODEL=gemini-3-pro-image-preview
+```
+
+`GEMINI_IMAGE_MODEL` は省略できます。生成画像は `generated-images/YYYY-MM/` に保存され、雑誌JSONの `asset.imageUrl` から参照されます。APIキーと生成画像はGit管理対象外です。
+
 ## 構成
 
 - `index.html`: アプリ本体
@@ -59,6 +72,7 @@ http://localhost:4173
 - `data/seed-worldline.json`: 初期世界線DB
 - `data/current-worldline.json`: 前回保存した世界線。生成または保存操作で作成
 - `data/magazines/YYYY-MM.json`: 年月ごとの保存済み雑誌
+- `generated-images/YYYY-MM/`: Geminiで生成した雑誌用画像
 - `docs/requirements.md`: 機能要件定義
 - `docs/architecture.md`: アーキテクチャ設計
 - `docs/ui-spec.md`: UIデザイン仕様

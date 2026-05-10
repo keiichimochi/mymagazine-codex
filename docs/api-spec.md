@@ -8,6 +8,8 @@
 - `codex-app-server`: `codex app-server` を子プロセス起動し、JSONL over stdio で Codex ハーネスを利用
 - `codex-cli`: `codex exec` による単発生成
 
+画像生成は `GEMINI_API_KEY` を使い、既定では Gemini Nano Banana Pro 相当の `gemini-3-pro-image-preview` を利用する。モデルは `GEMINI_IMAGE_MODEL` で上書きできる。
+
 参考にした App Server の前提:
 
 - `initialize` でハンドシェイクする
@@ -61,6 +63,8 @@
 {
   "ok": true,
   "provider": "codex-app-server",
+  "imageModel": "gemini-3-pro-image-preview",
+  "imageApiConfigured": true,
   "codexAvailable": true,
   "note": "codex app-server を子プロセスとして起動し、JSONL over stdio で生成します。"
 }
@@ -179,6 +183,46 @@
 ## `POST /api/magazine/current`
 
 現在の雑誌JSONを保存する。
+
+## `POST /api/magazine/asset-image`
+
+雑誌ページ内の1素材を Gemini API で生成し、`generated-images/YYYY-MM/` に保存する。戻り値の `imageUrl` を該当 `asset.imageUrl` に保存すると、誌面に実画像として表示される。
+
+### 入力
+
+```json
+{
+  "issueDate": "1998-04",
+  "pageNumber": 1,
+  "assetIndex": 0,
+  "page": {
+    "number": 1,
+    "section": "表紙",
+    "headline": "独占 Mega Drive 3 表紙"
+  },
+  "asset": {
+    "kind": "cover-art",
+    "title": "表紙 メインビジュアル",
+    "caption": "架空ソフトの誌面用メイン画像。",
+    "prompt": "Beepメガドライブ時代を参考にした..."
+  }
+}
+```
+
+### 出力
+
+```json
+{
+  "ok": true,
+  "model": "gemini-3-pro-image-preview",
+  "issueDate": "1998-04",
+  "pageNumber": 1,
+  "assetIndex": 0,
+  "imageUrl": "/generated-images/1998-04/p01-a01-cover-art-1710000000000.png",
+  "mimeType": "image/png",
+  "prompt": "Create a fictional Japanese 1990s retro game magazine visual asset..."
+}
+```
 
 ## `GET /api/magazines`
 
