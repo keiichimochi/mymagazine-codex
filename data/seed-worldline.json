@@ -1,0 +1,108 @@
+{
+  "hardware": [
+    {
+      "id": "md3",
+      "name": "Mega Drive 3",
+      "release": 1996,
+      "cpu": "68000互換CPU + SH2補助演算",
+      "sound": "YM2612X + PCM 8ch",
+      "media": "GD-Cartridge",
+      "identity": "2D、FM音源、カートリッジ文化を限界まで延命したセガ機"
+    },
+    {
+      "id": "pcengine2",
+      "name": "PC Engine 2",
+      "release": 1995,
+      "cpu": "HuC6280X dual",
+      "sound": "波形メモリ音源 + ADPCM 6ch",
+      "media": "HuCard EX / Super CD-ROM2",
+      "identity": "小型高性能とCD文化を両立したNEC継続機"
+    },
+    {
+      "id": "saturn2d",
+      "name": "Sega Saturn EX",
+      "release": 1997,
+      "cpu": "dual SH2+",
+      "sound": "SCSP-II",
+      "media": "CD-ROM / RAM Cartridge",
+      "identity": "3D競争に飲まれず、2D格闘とアーケード移植に全振りしたサターン"
+    },
+    {
+      "id": "neogeo-evo",
+      "name": "NeoGeo Evolution",
+      "release": 1998,
+      "cpu": "68020 + sprite accelerator",
+      "sound": "YMZ280B + arcade PCM",
+      "media": "MVS-E cartridge",
+      "identity": "家庭用と業務用の境界をさらに曖昧にしたSNK機"
+    }
+  ],
+  "manufacturers": [
+    {
+      "id": "sega_alt",
+      "name": "セガ第8AM統合計画室",
+      "stance": "アーケード文化と家庭用ハード戦争を継続させる急進派"
+    },
+    {
+      "id": "nec_he",
+      "name": "NECホームエレクトロニクス継続開発部",
+      "stance": "CD-ROMと小型ハード文化を守る技巧派"
+    },
+    {
+      "id": "snk_future",
+      "name": "新日本企画 第二開発局",
+      "stance": "格闘ゲーム、ドット絵、業務用基板を信仰する武闘派"
+    }
+  ],
+  "personas": [
+    {
+      "id": "fm_kikuchi",
+      "name": "菊池FM男",
+      "role": "音源オタ",
+      "voice": "音色、発音数、PCM帯域からゲームを評価する"
+    },
+    {
+      "id": "arcade_mari",
+      "name": "真理アーケード",
+      "role": "アーケード至上主義",
+      "voice": "家庭用移植の入力遅延と処理落ちに厳しい"
+    },
+    {
+      "id": "segahara",
+      "name": "瀬賀原ハード信者",
+      "role": "セガ信者",
+      "voice": "商業的敗北より思想の先進性を評価する"
+    },
+    {
+      "id": "rpg_sawada",
+      "name": "沢田RPG",
+      "role": "RPG狂",
+      "voice": "世界設定、成長曲線、攻略本的な読み応えを重視する"
+    },
+    {
+      "id": "kuso_kondo",
+      "name": "近藤B級",
+      "role": "クソゲーマニア",
+      "voice": "怪作、未完成、謎移植の魅力を拾い上げる"
+    }
+  ],
+  "articleTypes": [
+    "巻頭ハード戦争特集",
+    "新作速報",
+    "クロスレビュー",
+    "開発者インタビュー",
+    "音源比較",
+    "裏技道場",
+    "読者投稿",
+    "次号予告",
+    "架空広告",
+    "攻略集中連載"
+  ],
+  "adCulture": [
+    "謎の発売日未定広告",
+    "開発率35%の画面写真",
+    "読者プレゼントつき周辺機器広告",
+    "FM音源デモCD応募券",
+    "アーケード基板直系を強調する全面広告"
+  ]
+}

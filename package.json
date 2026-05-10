@@ -1,0 +1,17 @@
+{
+  "name": "mymagazine",
+  "version": "0.2.0",
+  "private": true,
+  "description": "IFゲーム雑誌の世界線エンジン",
+  "scripts": {
+    "start": "node server.js",
+    "start:codex": "MAGAZINE_AI_PROVIDER=codex-app-server node server.js",
+    "start:codex-exec": "MAGAZINE_AI_PROVIDER=codex-cli node server.js",
+    "restart": "bash scripts/restart-server.sh",
+    "restart:local": "MAGAZINE_AI_PROVIDER=local bash scripts/restart-server.sh",
+    "restart:codex": "MAGAZINE_AI_PROVIDER=codex-app-server bash scripts/restart-server.sh"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>IF通 世界線エンジン</title>
+    <link rel="stylesheet" href="src/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="kicker">1998 DOES NOT EXIST YET</p>
+        <h1>IF通 世界線エンジン</h1>
+      </div>
+      <div class="issue-badge">
+        <span>創刊準備号</span>
+        <strong>16P</strong>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section class="panel form-panel" aria-labelledby="hearing-title">
+        <div class="section-head">
+          <p class="kicker">EDITORIAL HEARING</p>
+          <h2 id="hearing-title">編集部ヒアリング</h2>
+        </div>
+        <form id="hearing-form" class="hearing-form">
+          <label>
+            <span>1. 最も好きなゲームハード TOP10</span>
+            <textarea name="hardwareTop10" rows="4" placeholder="メガドライブ&#10;PCエンジン&#10;セガサターン"></textarea>
+          </label>
+          <label>
+            <span>2. 最も好きなゲーム TOP20</span>
+            <textarea name="gamesTop20" rows="5" placeholder="シャイニング・フォース&#10;ガンスターヒーローズ"></textarea>
+          </label>
+          <label>
+            <span>3. 好きなゲームジャンル</span>
+            <textarea name="genres" rows="3" placeholder="SRPG&#10;横STG&#10;ベルトスクロール"></textarea>
+          </label>
+          <label>
+            <span>4. 好きなゲーム音楽作曲家 / 音楽傾向</span>
+            <textarea name="composers" rows="3" placeholder="古代祐三&#10;FM音源&#10;テクノ"></textarea>
+          </label>
+          <label>
+            <span>5. 好きな雑誌文化</span>
+            <textarea name="magazineCulture" rows="3" placeholder="Beep MD&#10;ゲーメスト&#10;ドリマガ"></textarea>
+          </label>
+          <label>
+            <span>6. 最も刺さる架空世界線</span>
+            <textarea name="worldline" rows="3" placeholder="セガ勝利世界&#10;アーケード文化継続"></textarea>
+          </label>
+          <label>
+            <span>7. 好きなゲーム雑誌要素</span>
+            <textarea name="magazineElements" rows="3" placeholder="クロスレビュー&#10;開発者インタビュー&#10;裏技"></textarea>
+          </label>
+          <label>
+            <span>8. 絶対に欲しい架空ハード</span>
+            <textarea name="mustHardware" rows="3" placeholder="MD3&#10;Dreamcast2&#10;PCエンジン2"></textarea>
+          </label>
+          <label>
+            <span>9. 最も好きなゲーム時代</span>
+            <input name="era" type="text" placeholder="1993-1996">
+          </label>
+          <label>
+            <span>10. 雑誌のトーン</span>
+            <input name="tone" type="text" placeholder="技術オタ誌、BEEP的、ゲーメスト的狂気">
+          </label>
+          <div class="actions">
+            <button type="button" class="secondary" id="sample-button">サンプル投入</button>
+            <button type="submit">世界線を生成</button>
+            <button type="button" class="secondary" id="load-worldline-button">前回読込</button>
+            <button type="button" class="secondary" id="save-worldline-button">世界線保存</button>
+            <button type="button" class="secondary" id="image-prompts-button">画像プロンプト生成</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel result-panel" aria-labelledby="result-title">
+        <div class="section-head">
+          <p class="kicker">WORLDLINE CORE</p>
+          <h2 id="result-title">生成結果</h2>
+        </div>
+        <div id="summary" class="summary empty">
+          <p>ヒアリングを入力すると、固定世界線DBと創刊号設計が生成されます。</p>
+        </div>
+      </section>
+    </main>
+
+    <section class="workspace">
+      <div class="issue-toolbar" aria-label="雑誌生成操作">
+        <label>
+          <span>雑誌年月</span>
+          <input id="issue-date" type="month" value="1998-04">
+        </label>
+        <button type="button" id="generate-magazine-button">雑誌を生成</button>
+        <button type="button" class="secondary" id="load-magazine-button">雑誌読込</button>
+        <button type="button" class="secondary" id="save-magazine-button">雑誌保存</button>
+      </div>
+      <div class="tabs" role="tablist" aria-label="生成結果タブ">
+        <button class="tab" data-tab="magazine" type="button">雑誌</button>
+        <button class="tab" data-tab="library" type="button">保存済み</button>
+        <button class="tab active" data-tab="pages" type="button">16ページ</button>
+        <button class="tab" data-tab="db" type="button">DB</button>
+        <button class="tab" data-tab="timeline" type="button">年表編集</button>
+        <button class="tab" data-tab="images" type="button">画像生成</button>
+        <button class="tab" data-tab="pipeline" type="button">生成パイプライン</button>
+        <button class="tab" data-tab="json" type="button">JSON</button>
+      </div>
+      <div id="tab-magazine" class="tab-panel"></div>
+      <div id="tab-library" class="tab-panel"></div>
+      <div id="tab-pages" class="tab-panel active"></div>
+      <div id="tab-db" class="tab-panel"></div>
+      <div id="tab-timeline" class="tab-panel"></div>
+      <div id="tab-images" class="tab-panel">
+        <p class="muted">世界線生成後に「画像プロンプト生成」を押すと、Codex/App Serverまたはローカル生成でプロンプトを作ります。</p>
+      </div>
+      <div id="tab-pipeline" class="tab-panel"></div>
+      <div id="tab-json" class="tab-panel">
+        <div class="code-head">
+          <span>worldline.json</span>
+          <button id="copy-json" class="secondary" type="button">JSONコピー</button>
+        </div>
+        <pre id="json-output">{}</pre>
+      </div>
+    </section>
+
+    <script src="src/app.js"></script>
+  </body>
+</html>

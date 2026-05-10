@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+.server.log
+
+# Local/generated state. Keep source code and seed data in git, but do not
+# publish the user's generated magazines or current worldline by default.
+data/current-worldline.json
+data/magazines/*.json
